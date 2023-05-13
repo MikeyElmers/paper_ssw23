@@ -2,3 +2,11 @@
 .Rhistory
 .RData
 .Ruserdata
+scripts/00_renvSnapshot.R
+scripts/00_sessionInfo.R
+scripts/00_test.R
+data/working/data_full_binomial.csv
+data/working/data_nns_binom.csv
+data/working/data_nns.csv
+data/working/data_ns_binom.csv
+data/working/data_ns.csv
