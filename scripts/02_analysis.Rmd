@@ -1,0 +1,622 @@
+---
+title: "analysis"
+author: "Mikey Elmers"
+date: "12/06/2022"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r, eval=FALSE, echo=FALSE}
+rmarkdown::render(here::here('scripts/02_analysis.Rmd'),
+                  output_dir = here::here('output/'))
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE, echo=FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(lme4)
+library(lmerTest)
+library(car)
+library(dunn.test)
+library(effsize)
+```
+
+## Overview
+This document investigates the influence of pause-internal particles (PINTs) for university lectures in a content-based listening task that used sythesized speech. The following PINTs are investigated in the present study: silence, inhalation noises, exhalation noises, filler particles, and tongue clicks. Participants were asked to listen to audio recordings that were approximately three minutes in length and answer content-based questions. 180 participants were recruited. 90 participants were monolingual speakers of English. The other 90 participants were native speakers of German with an English proficiency. Half of participants were told in the instructions that they heard computer-generated speech, while the other half were told that the speaker was using a non-ideal microphone and included some background noise. 5 participants were removed due to hearing impairment.
+
+Listeners heard a total of four audio segments, each followed by two questions. Participants were scored based on how many questions they got correct with a maximum possible score of 8. Participants were split into six different groups based upon the condition of the audio. Each participant heard only one condition.
+The following conditions are investigated: 
+
+* base condition which included unmodified synthesized audio and participants were told the audio was from a poor quality microphone
+* base_cg condition which included unmodified synthesized audio and participants were told the audio was computer_generated
+* sil condition where all non-silence PINTs material is replaced with silence (same total duration as original audio) and participants were told the audio was from a poor quality microphone
+* sil_cg condition where all non-silence PINTs material is replaced with silence (same total duration as original audio) and participants were told the audio was computer_generated
+* nopints condition where all PINTs are excised from the audio (shorter duration than base and sil conditions) and participants were told the audio was from a poor quality microphone
+* nopints_cg condition where all PINTs are excised from the audio (shorter duration than base and sil conditions) and participants were told the audio was computer_generated
+
+### Yale lectures
+Lectures taken from [Open Yale Courses](https://oyc.yale.edu). 
+
+1. [Langdon Hammer](https://oyc.yale.edu/english/engl-310) 
+    + Course Number: ENGL 310
+    + Course Name: Modern Poetry
+    + Sessions: 25
+  
+## Dataframe codebook
+Variable Name         | Description
+---                   | ---
+id                    | subject id number
+condition             | six possible experimental conditions (base, base_cg, sil, sil_cg, nopints, nopints_cg)
+total_score           | subject's total number of correct answers (max score is 8)
+age                   | subject's age (in years)
+ease                  | how easy or difficult the subject found the speaker (1: very difficult to 5: very easy)
+edu                   | subject education with 3 levels (high school/equivalent, university, and other)
+imphear               | subject self-assessment of hearing impairment
+interest              | how interesting the subject found the speaker (1: very uninteresting to 5: very interesting)
+L1                    | subject's native language with 2 levels (English or German)
+notes                 | subject self-assessment of whether they took notes (they were instructed to not take notes)
+prep                  | how prepared the subject perceived the speaker (1: very unprepared to 5: very prepared)
+self                  | subject's self-assessment of their English proficiency (applicable for the German speakers)
+test                  | CEFR test for subject (applicable for the German speakers)
+question              | refers to question 1 or question 2 for each audio file
+answer                | subject's answer to specific question
+score                 | subject's score; 1 for correct and 0 for incorrect
+precede               | refers to whether PINTs immediately preceded the experimental material
+
+## Load in data
+```{r, echo=FALSE}
+df <- read.csv(here::here("data/final/data_full.csv"))
+df_de <- read.csv(here::here("data/final/data_de.csv"))
+df_en <- read.csv(here::here("data/final/data_en.csv"))
+df_binomial_all <- read.csv(here::here("data/final/data_binomial_all.csv"))
+df_comparison <- read.csv(here::here("data/final/data_synth_orig_comp.csv"))
+```
+
+One participant from the monolingual English group reported hearing impairment and was removed from the analysis.
+```{r}
+# remove participant with hearing impairment
+df <- df %>% filter(imphear == "no")
+df_en <- df_en %>% filter(imphear == "no")
+df_de <- df_de %>% filter(imphear == "no")
+df_binomial_all <- df_binomial_all %>% filter(imphear == "no")
+```
+
+Add column that groups conditions (sil + sil_cg, base + base_cg, etc.)
+```{r}
+df <- df %>% 
+  mutate(group = case_when(
+    condition %in% c("sil", "sil_cg") ~ "sil",
+    condition %in% c("nopints", "nopints_cg") ~ "nopints",
+    TRUE ~ "base"
+  ))
+```
+
+Add column that groups based on instructions (computer-generated or not)
+```{r}
+df <- df %>% 
+  mutate(cg = case_when(
+    condition %in% c("base_cg", "sil_cg", "nopints_cg") ~ "yes",
+    condition %in% c("base", "sil", "nopints") ~ "no",
+  ))
+
+df_binomial_all <- df_binomial_all %>% 
+  mutate(cg = case_when(
+    condition %in% c("base_cg", "sil_cg", "nopints_cg") ~ "yes",
+    condition %in% c("base", "sil", "nopints") ~ "no",
+  ))
+
+df_de <- df_de %>% 
+  mutate(cg = case_when(
+    condition %in% c("base_cg", "sil_cg", "nopints_cg") ~ "yes",
+    condition %in% c("base", "sil", "nopints") ~ "no",
+  ))
+
+df_en <- df_en %>% 
+  mutate(cg = case_when(
+    condition %in% c("base_cg", "sil_cg", "nopints_cg") ~ "yes",
+    condition %in% c("base", "sil", "nopints") ~ "no",
+  ))
+```
+
+### Correlation
+When looking at correlations for participant's total score we see that the interest has a weak correlation.This correlation is stronger for the German participants than the monolingual English participants. 
+```{r}
+df_cor <- df[, c(3,4,5,8,11)]
+cor(df_cor)
+cor.test(df_cor$total_score, df_cor$interest)
+cor.test(df_cor$total_score, df_cor$age)
+cor.test(df_cor$total_score, df_cor$ease)
+cor.test(df_cor$total_score, df_cor$prep)
+#test <- cor(df_cor, method = "pearson")
+#cor(df_cor, method = "spearman")
+
+df_de_cor <- df_de[, c(3,4,5,8,11)]
+cor(df_de_cor)
+
+df_en_cor <- df_en[, c(3,4,5,8,11)]
+cor(df_en_cor)
+```
+
+### Interest
+```{r}
+# interest score in general
+df %>% 
+  summarize(mean_int = mean(interest), 
+            median_int = median(interest), 
+            sd_int = sd(interest))
+
+# interest per condition
+df %>% 
+  group_by(condition) %>% 
+  summarize(mean_int = mean(interest),
+            sd_int = sd(interest)) %>%
+  arrange(desc(mean_int)) %>% 
+  ungroup()
+
+# interest per L1
+df %>% 
+  group_by(L1) %>% 
+  summarize(mean_int = mean(interest),
+            sd_int = sd(interest)) %>%
+  arrange(desc(mean_int)) %>% 
+  ungroup()
+
+# interest grouped by condition and L1
+df %>% 
+  group_by(condition, L1) %>% 
+  summarize(mean_int = mean(interest)) %>% 
+  arrange(desc(mean_int)) %>% 
+  ungroup()
+
+######################### L1 Comparison ########################################
+# normality is violated
+# H0: The samples come from a normal distribution
+# H1: The samples do not come from a normal distribution
+# p-value < 0.05 (data deviates from normality)
+shapiro.test(df$interest)
+
+# homogeneity of variances is maintained across L1
+# H0: variances are equal
+# H1: variances are not equal
+# p-value > 0.05 (variances are not significantly different between groups)
+leveneTest(interest ~ L1, data = df)
+leveneTest(interest ~ condition, data = df)
+
+# t-test
+# since the central limit theorem is satisfied (n > 30) we will still proceed with parametric tests.
+t.test(df_en$interest, df_de$interest, var.equal = TRUE)
+
+# cohen's d
+cohen.d(df_en$interest, df_de$interest)
+######################### Condition Comparison #################################
+# anova for each condition
+summary(aov(interest ~ condition, data = df))
+
+# Bonferroni-correct t-test
+pairwise.t.test(df$interest, df$condition, p.adjust.method = "bonferroni")
+```
+
+Converting variables to factors.
+```{r}
+# convert to factors
+df$id <- as.factor(df$id)
+df$condition <- as.factor(df$condition)
+df$group <- as.factor(df$group)
+df$cg <- as.factor(df$cg)
+# df$ease <- as.factor(df$ease)
+df$prep <- as.factor(df$prep)
+df$edu <- as.factor(df$edu)
+df$L1 <- as.factor(df$L1)
+df$self <- as.factor(df$self)
+df$test <- as.factor(df$test)
+
+df_de$id <- as.factor(df_de$id)
+df_de$condition <- as.factor(df_de$condition)
+df_de$cg <- as.factor(df_de$cg)
+# df_de$ease <- as.factor(df_de$ease)
+df_de$prep <- as.factor(df_de$prep)
+df_de$edu <- as.factor(df_de$edu)
+df_de$L1 <- as.factor(df_de$L1)
+df_de$self <- as.factor(df_de$self)
+df_de$test <- as.factor(df_de$test)
+
+df_en$id <- as.factor(df_en$id)
+df_en$condition <- as.factor(df_en$condition)
+df_en$cg <- as.factor(df_en$cg)
+# df_en$ease <- as.factor(df_en$ease)
+df_en$prep <- as.factor(df_en$prep)
+df_en$edu <- as.factor(df_en$edu)
+df_en$L1 <- as.factor(df_en$L1)
+df_en$self <- as.factor(df_en$self)
+df_en$test <- as.factor(df_en$test)
+
+df_binomial_all$id <- as.factor(df_binomial_all$id)
+df_binomial_all$condition <- as.factor(df_binomial_all$condition)
+df_binomial_all$cg <- as.factor(df_binomial_all$cg)
+# df_binomial_all$ease <- as.factor(df_binomial_all$ease)
+df_binomial_all$prep <- as.factor(df_binomial_all$prep)
+df_binomial_all$edu <- as.factor(df_binomial_all$edu)
+df_binomial_all$L1 <- as.factor(df_binomial_all$L1)
+df_binomial_all$self <- as.factor(df_binomial_all$self)
+df_binomial_all$test <- as.factor(df_binomial_all$test)
+df_binomial_all$question <- as.factor(df_binomial_all$question)
+df_binomial_all$precede <- as.factor(df_binomial_all$precede)
+```
+
+## Descriptive Statistics
+### All participants
+The mean, median, standard deviation and number are found below. The maximum score is 8.
+```{r}
+df %>% 
+  summarize(mean_all = mean(total_score), 
+            median_all = median(total_score), 
+            sd_all = sd(total_score),
+            N = n())
+```
+
+### L1 comparison
+On average the L1 English listeners performed worse as seen by the mean with a comparable variance. However, the difference between means is not statistically significant between the two groups.
+```{r}
+df %>% 
+  group_by(L1) %>% 
+  summarize(mean = mean(total_score), 
+            median = median(total_score), 
+            sd = sd(total_score), 
+            N = n()) %>% 
+  ungroup()
+
+# normality is violated
+# H0: The samples come from a normal distribution
+# H1: The samples do not come from a normal distribution
+# p-value < 0.05 (data deviates from normality)
+shapiro.test(df$total_score)
+
+# homogeneity of variances is maintained across L1
+# H0: variances are equal
+# H1: variances are not equal
+# p-value > 0.05 (variances are not significantly different between groups)
+leveneTest(total_score ~ L1, data = df)
+
+# t-test
+# since the central limit theorem is satisfied (n > 30) we will still proceed with parametric tests.
+t.test(df_en$total_score, df_de$total_score, var.equal = TRUE)
+
+# cohen's d
+cohen.d(df_en$total_score, df_de$total_score)
+```
+
+### Condition & Group comparison
+The condition with the highest mean is the silence condition where participants were told the audio was computer-generated. The conditions where the participants were told the audio was computer-generated was rated higher than the conditions where they were told the speaker used a poor quality microphone, except for the no PINTs condition. However, none of the groups or conditions total score means were statistically different from each other. We used a Bonferroni-corrected pairwise t-test to compare the mean total scores. The results indicated that there were no significant differents between any of the mean total scores. However, this method is conversative and struggles when there are many groups being compared. A t-test between the silence and silence_cg shows a significant difference between the means of the total scores.
+```{r}
+df %>% 
+  group_by(condition) %>% 
+  summarize(mean = mean(total_score), 
+            median = median(total_score), 
+            sd = sd(total_score), 
+            N = n()) %>%
+  arrange(desc(mean)) %>%
+  ungroup()
+
+# normality is violated
+# H0: The samples come from a normal distribution
+# H1: The samples do not come from a normal distribution
+# p-value < 0.05 (data deviates from normality)
+shapiro.test(df$total_score)
+
+# homogeneity of variances is maintained across conditions
+# H0: variances are equal
+# H1: variances are not equal
+# p-value > 0.05 (variances are not significantly different between groups)
+leveneTest(total_score ~ condition, data = df)
+leveneTest(total_score ~ group, data = df)
+
+# anova for each group
+summary(aov(total_score ~ group, data = df))
+
+# Bonferroni-correct t-test
+pairwise.t.test(df$total_score, df$group, p.adjust.method = "bonferroni")
+
+# anova for each condition
+summary(aov(total_score ~ condition, data = df))
+
+# Bonferroni-correct t-test
+pairwise.t.test(df$total_score, df$condition, p.adjust.method = "bonferroni")
+
+# t test
+# since the central limit theorem is satisfied (n > 30) we will still proceed with parametric tests.
+sil_cg_group <- subset(df, condition == "sil_cg")
+sil_group <- subset(df, condition == "sil")
+t.test(sil_cg_group$total_score, sil_group$total_score, var.equal = TRUE)
+
+# cohen's d
+cohen.d(sil_cg_group$total_score, sil_group$total_score)
+```
+
+### Condition and L1 comparison
+```{r}
+df %>% 
+  group_by(condition, L1) %>% 
+  summarize(mean = mean(total_score), 
+            median = median(total_score), 
+            sd = sd(total_score), 
+            N = n()) %>% 
+  arrange(desc(mean)) %>% 
+  ungroup()
+```
+### CG
+```{r}
+df %>% 
+  group_by(cg) %>% 
+  summarize(mean = mean(total_score), 
+            median = median(total_score), 
+            sd = sd(total_score), 
+            N = n()) %>% 
+  ungroup()
+
+# normality is violated
+# H0: The samples come from a normal distribution
+# H1: The samples do not come from a normal distribution
+# p-value < 0.05 (data deviates from normality)
+shapiro.test(df$total_score)
+
+# homogeneity of variances is maintained across L1
+# H0: variances are equal
+# H1: variances are not equal
+# p-value > 0.05 (variances are not significantly different between groups)
+leveneTest(total_score ~ cg, data = df)
+
+# t-test
+# since the central limit theorem is satisfied (n > 30) we will still proceed with parametric tests.
+cg_yes <- subset(df, cg == "yes")
+cg_no <- subset(df, cg == "no")
+t.test(cg_yes$total_score, cg_no$total_score, var.equal = TRUE)
+
+# cohen's d
+cohen.d(cg_yes$total_score, cg_no$total_score)
+```
+### L1 and CG
+```{r}
+df %>% 
+  group_by(L1, cg) %>% 
+  summarize(mean = mean(total_score), 
+            median = median(total_score), 
+            sd = sd(total_score), 
+            N = n()) %>%
+  arrange(desc(mean)) %>%
+  ungroup()
+
+summary(aov(total_score ~ L1 + cg, data = df))
+summary(aov(total_score ~ L1, data = df))
+summary(aov(total_score ~ cg, data = df))
+```
+
+### Precede
+Subject's performed better when experimental material was not immediately preceded by PINTs material. The output from the Wilcoxon rank-sum test indicates that there is evidence for difference between the two groups. 
+```{r}
+df_binomial_all %>% 
+  group_by(precede) %>% 
+  summarize(mean = mean(score), 
+            median = median(score), 
+            sd = sd(score), 
+            count = sum(score == 1),
+            N = n()) %>% 
+  arrange(desc(mean)) %>% 
+  ungroup()
+
+# normality is violated
+# H0: The samples come from a normal distribution
+# H1: The samples do not come from a normal distribution
+# p-value < 0.05 (data deviates from normality)
+shapiro.test(df_binomial_all$score)
+
+# homogeneity of variances is maintained across L1
+# H0: variances are equal
+# H1: variances are not equal
+# p-value < 0.05 (variances are significantly different between groups)
+leveneTest(score ~ precede, data = df_binomial_all)
+
+# Wilcoxon rank-sum test
+# since both normality and equal variances is violated a non-parametric test is used
+precede_yes_group <- subset(df_binomial_all, precede == "yes")
+precede_no_group <- subset(df_binomial_all, precede == "no")
+wilcox.test(precede_no_group$score, precede_yes_group$score)
+```
+
+### Precede - by condition
+All conditions when not precede by PINTs were scored better than the conditions that were preceded by PINTs material. A Kruskal-Wallis test found a significant effect of condition on score (H(3) = 10.039, p < 0.05). Post-hoc tests using Dunn's test with a Bonferroni adjustment revealed a significant difference the base_cg and sil conditions (M = 2.412; p < 0.05) sil and sil_cg conditions (M = -2.967; p < 0.01).
+```{r}
+df_binomial_all %>% 
+  group_by(precede, condition) %>% 
+  summarize(mean = mean(score), 
+            median = median(score), 
+            sd = sd(score),
+            count = sum(score == 1),
+            N = n()) %>% 
+  arrange(desc(mean)) %>% 
+  ungroup()
+
+# Kruskal-Wallis rank sum test and Dunn's test for post-hoc comparisons with Bonferroni correction
+kruskal.test(score ~ precede, data = df_binomial_all)
+kruskal.test(score ~ condition, data = df_binomial_all)
+dunn.test(df_binomial_all$score, df_binomial_all$condition, method = "bonferroni")
+```
+
+
+## Inferential Statistics
+### Checking assumption
+The shapiro test indicates that our data does not come a normal distribution. Since the central limit theorem is satisfied (n > 30) we will still proceed with parametric tests. 
+```{r}
+# Checking Assumptions 
+qqnorm(df$total_score, col = "darkred", main = "Title")
+qqline(df$total_score, col = "darkgrey", lwd = 3)
+
+# H0: The samples come from a normal distribution
+# H1: The samples do not come from a normal distribution
+# p-value < .05.Data deviates from normality
+shapiro.test(df$total_score)
+```
+
+## Modeling
+### All Data: linear regression with interest
+```{r}
+#model_test <- lmer(total_score ~ condition + (1 | id), data = df, REML = FALSE)
+df$interest <- as.factor(df$interest)
+df$ease <- as.factor(df$ease)
+model0 <- lm(total_score ~ interest, data = df)
+model1 <- lm(total_score ~ interest + ease, data = df)
+model2 <- lm(total_score ~ interest * ease, data = df)
+model3 <- lm(total_score ~ interest + L1, data = df)
+model4 <- lm(total_score ~ interest * L1, data = df)
+model5 <- lm(total_score ~ interest + condition, data = df)
+model6 <- lm(total_score ~ interest * condition, data = df)
+model7 <- lm(total_score ~ interest + group, data = df)
+model8 <- lm(total_score ~ interest * group, data = df)
+model9 <- lm(total_score ~ interest + cg, data = df)
+AIC(model0, model1, model2, model3, model4, model5, model6, model7, model8, model9)
+summary(model0)
+summary(model9)
+#model4 <- lmer(total_score ~ L1 + (1 | condition), data = df, REML = FALSE)
+```
+
+### L1 German participants only
+```{r}
+df_de$ease <- as.factor(df_de$ease)
+df_de$interest <- as.factor(df_de$interest)
+model_de0 <- lm(total_score ~ condition, data = df_de)
+model_de1 <- lm(total_score ~ ease, data = df_de)
+model_de2 <- lm(total_score ~ prep, data = df_de)
+model_de3 <- lm(total_score ~ age, data = df_de)
+model_de4 <- lm(total_score ~ edu, data = df_de)
+model_de5 <- lm(total_score ~ interest, data = df_de)
+model_de6 <- lm(total_score ~ self, data = df_de)
+model_de7 <- lm(total_score ~ test, data = df_de)
+
+AIC(model_de0, model_de1, model_de2, model_de3, model_de4, model_de5, model_de6, 
+    model_de7)
+summary(model_de6)
+df_de %>% 
+  group_by(self) %>% 
+  count() %>% 
+  ungroup()
+summary(model_de5)
+```
+
+### Monolingual English participants only
+The model with the lowest AIC is has ease and preparation as fixed effects but only ease level 2 is significant. 
+```{r}
+df_en$interest <- as.factor(df_en$interest)
+df_en$ease <- as.factor(df_en$ease)
+model_en0 <- lm(total_score ~ condition, data = df_en)
+model_en1 <- lm(total_score ~ ease, data = df_en)
+model_en2 <- lm(total_score ~ prep, data = df_en)
+model_en3 <- lm(total_score ~ age, data = df_en)
+model_en4 <- lm(total_score ~ edu, data = df_en)
+model_en5 <- lm(total_score ~ interest, data = df_en)
+AIC(model_en0, model_en1, model_en2, model_en3, model_en4, model_en5)
+summary(model_en5)
+```
+### Binomial Data: All
+```{r}
+# Checking Assumptions 
+qqnorm(df_binomial_all$score, col = "darkred", main = "Title")
+qqline(df_binomial_all$score, col = "darkgrey", lwd = 3)
+
+# H0: The samples come from a normal distribution
+# H1: The samples do not come from a normal distribution
+# p-value < .05.Data deviates from normality
+shapiro.test(df_binomial_all$score)
+
+df_binomial_all$ease <- as.factor(df_binomial_all$ease)
+df_binomial_all$interest <- as.factor(df_binomial_all$interest)
+model_binomial0 <- glmer(score ~ L1 + (1 | id), data = df_binomial_all, family = binomial)
+model_binomial1 <- glmer(score ~ condition + (1 | id), data = df_binomial_all, family = binomial)
+model_binomial2 <- glmer(score ~ precede + (1 | id), data = df_binomial_all, family = binomial)
+model_binomial3 <- glmer(score ~ ease + (1 | id), data = df_binomial_all, family = binomial)
+model_binomial4 <- glmer(score ~ interest + (1 | id), data = df_binomial_all, family = binomial)
+model_binomial5 <- glmer(score ~ age + (1 | id), data = df_binomial_all, family = binomial)
+model_binomial6 <- glmer(score ~ precede + interest + (1 | id), data = df_binomial_all, family = binomial)
+model_binomial8 <- glmer(score ~ precede + cg + (1 | id), data = df_binomial_all, family = binomial)
+model_binomial9 <- glmer(score ~ precede * cg + (1 | id), data = df_binomial_all, family = binomial)
+model_binomial10 <- glmer(score ~ cg + (1 | id), data = df_binomial_all, family = binomial)
+model_binomial11 <- glmer(score ~ precede + interest + cg + (1 | id), data = df_binomial_all, family = binomial)
+
+AIC(model_binomial0, model_binomial1, model_binomial2, model_binomial3, model_binomial4, model_binomial5,
+    model_binomial6, model_binomial8, model_binomial9, model_binomial10, model_binomial11)
+summary(model_binomial6)
+summary(model_binomial11)
+```
+
+```{r}
+# anova
+df_aov <- aov(total_score ~ condition,
+              data = df)
+
+shapiro.test(df_aov$residuals)
+
+hist(df_aov$residuals)
+
+qqnorm(df_aov$residuals, col = "darkred", main = "Title")
+qqline(df_aov$residuals, col = "darkgrey", lwd = 3)
+
+oneway.test(total_score ~ condition,
+            data = df,
+            var.equal = FALSE)
+
+oneway.test(total_score ~ L1,
+            data = df,
+            var.equal = FALSE)
+```
+
+### Compare Synthesis Annotations to Original
+```{r}
+df_comparison %>% 
+  group_by(condition) %>% 
+  summarise(total_dur_pints = sum(dur),
+            total_dur_speaking = sum(unique(filedur)),
+            prop = total_dur_pints / total_dur_speaking * 100,
+            mean_int = mean(mean_intensity),
+            sd_int = sd(mean_intensity)) %>% 
+  ungroup()
+
+df_comparison %>% 
+  group_by(condition, segment) %>% 
+  summarise(count = n()) %>%  
+  ungroup()
+```
+
+```{r}
+# create dataframe
+df_graph <- data.frame(condition = c("base", "silence", "no PINTs"),
+                       speech = c(50, 50, 50),
+                       PINTs = c(30, 30, 0),
+                       answer= c(20, 20, 20))
+
+# Reshape the dataframe from wide to long format using tidyr
+df_long <- tidyr::pivot_longer(df_graph, cols = c("speech", "PINTs", "answer"))
+
+# Modify the levels of the "condition" factor to rearrange the bars
+df_long$condition <- factor(df_long$condition, levels = c("no PINTs", "silence", "base"))
+
+# create horizontal barplot
+ggplot(df_long, aes(x = value, y = condition, fill = name)) +
+  geom_bar(stat = "identity", position = "stack", color = "black", width = 0.85) +
+  scale_fill_manual(values = c("speech" = "white", "PINTs" = "darkgrey", "answer" = "black")) +
+  labs(title = NULL,
+       x = "Duration",
+       y = NULL,
+       fill = NULL) +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_text(size = 20, face = "bold", family = "Times", color = "black"),
+        axis.title = element_text(size = 20, face = "bold", family = "Times", color = "black"),
+        legend.position = "none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+```
+
