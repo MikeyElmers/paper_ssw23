@@ -3,6 +3,8 @@
 # The impact of pause-internal phonetic particles on recall in synthesized lectures (This repository will be updated after acceptance)
 This repository contains the data and code for "The impact of pause-internal phonetic particles on recall in synthesized lectures" by Mikey Elmers and Éva Székely for the 12th ISCA Speech Synthesis Workshop (SSW ’23), Grenoble, Aug 26-28. This study investigated the effect of pause-internal phonetic particles (PINTs) on recall for native and non-native listeners of English in a listener experiment with synthesized material that simulated a university lecture.
 
+A demo of the text-to-speech stimuli can be found [here](https://mikeyelmers.github.io/paper_ssw23ttsdemo/).
+
 The following PINTs are investigated: 
 
 * silence (sil)
