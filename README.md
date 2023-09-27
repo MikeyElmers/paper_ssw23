@@ -1,6 +1,6 @@
 [![orcid](https://img.shields.io/badge/ORCID-0000--0002--3929--788X-green?style=plastic&logo=orcid&url=https://orcid.org/0000-0002-3929-788X)](https://orcid.org/0000-0002-3929-788X)
 
-# The impact of pause-internal phonetic particles on recall in synthesized lectures (This repository will be updated after acceptance)
+# The impact of pause-internal phonetic particles on recall in synthesized lectures
 This repository contains the data and code for "The impact of pause-internal phonetic particles on recall in synthesized lectures" by Mikey Elmers and Éva Székely for the 12th ISCA Speech Synthesis Workshop (SSW ’23), Grenoble, Aug 26-28. This study investigated the effect of pause-internal phonetic particles (PINTs) on recall for native and non-native listeners of English in a listener experiment with synthesized material that simulated a university lecture.
 
 A demo of the text-to-speech stimuli can be found [here](https://mikeyelmers.github.io/paper_ssw23ttsdemo/).
@@ -39,7 +39,8 @@ The following PINTs are investigated:
 - Final data
 
 ### `docs`
-- `elmers_ssw23_paper.pdf`: SSW '23 paper submission (will be added when available)
+- `elmers_ssw23_paper.pdf`: SSW '23 paper submission
+- `elmers_ssw23_poster.pdf`: SSW '23 poster submission
 
 ### `output`
 - `02_analysis.html`: Output of analysis.Rmd file
