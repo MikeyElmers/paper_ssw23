@@ -21,6 +21,7 @@ The following PINTs are investigated:
     * [docs](#docs)
     * [output](#output)
     * [scripts](#scripts)
+- [Citation](#citation)  
 - [Issues/comments/suggestions](#issuescommentssuggestions)
 - [License](#license)
 - [References](#references)
@@ -51,6 +52,19 @@ The following PINTs are investigated:
 - `00_renvRestore.R`: Restores project dependencies
 - `01_clean.R`: Cleans and exports final data
 - `02_analysis.Rmd`: Descriptive and inferential data analysis
+
+## Citation
+If you use this data or code for you work, please cite as:
+```bibtex
+@inproceedings{elmers23ssw,
+  author={Mikey Elmers and \'{E}va Sz\'{e}kely},
+  title={{The Impact of Pause-Internal Phonetic Particles on Recall in Synthesized Lectures}},
+  year=2023,
+  booktitle={Proc. 12th ISCA Speech Synthesis Workshop (SSW2023)},
+  pages={204--210},
+  doi={10.21437/SSW.2023-32}
+}
+```
 
 ## Issues/Comments/Suggestions
 Please use the [issue tracker](https://github.com/MikeyElmers/paper_ssw23/issues). 
